@@ -1,21 +1,28 @@
-"""Application error hierarchy and FastAPI exception handlers.
+"""Translation of application errors into HTTP responses.
 
-Domain and service layers raise :class:`AppError` subclasses; they never import
-FastAPI or construct HTTP responses. This module is the single place where an
-application error is translated into a wire format, so every failure the API
+The error classes themselves live in :mod:`app.core.errors` so that the domain
+and service layers can raise them without importing FastAPI. This module is the
+single place where an error becomes a wire format, so every failure the API
 returns has the same shape.
 """
-
-from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 from starlette import status
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.errors import AppError, ErrorResponse, NotFoundError, ValidationError
 from app.core.logging import get_logger
+
+# Re-exported so callers can import the error contract from one place.
+__all__ = [
+    "AppError",
+    "ErrorResponse",
+    "NotFoundError",
+    "ValidationError",
+    "register_exception_handlers",
+]
 
 logger = get_logger(__name__)
 
@@ -23,45 +30,6 @@ _HTTP_ERROR_CODES: dict[int, str] = {
     status.HTTP_404_NOT_FOUND: "not_found",
     status.HTTP_405_METHOD_NOT_ALLOWED: "method_not_allowed",
 }
-
-
-class ErrorResponse(BaseModel):
-    """Uniform error body returned by every failing endpoint."""
-
-    error: str = Field(description="Stable, machine-readable error code.")
-    message: str = Field(description="Human-readable explanation.")
-    details: dict[str, Any] | None = Field(
-        default=None, description="Optional structured context about the failure."
-    )
-
-
-class AppError(Exception):
-    """Base class for all expected application errors."""
-
-    code: str = "internal_error"
-    status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
-        super().__init__(message)
-        self.message = message
-        self.details = details
-
-    def to_response(self) -> ErrorResponse:
-        return ErrorResponse(error=self.code, message=self.message, details=self.details)
-
-
-class NotFoundError(AppError):
-    """A requested resource does not exist."""
-
-    code = "not_found"
-    status_code = status.HTTP_404_NOT_FOUND
-
-
-class ValidationError(AppError):
-    """Caller-supplied input was rejected by the application."""
-
-    code = "validation_error"
-    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
