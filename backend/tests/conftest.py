@@ -12,9 +12,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.adapters.embeddings.fake import FakeEmbeddingProvider
+from app.adapters.llm.fake import FakeLLMProvider
 from app.adapters.repository.memory import InMemoryTranscriptRepository
 from app.adapters.vectorstore.memory import InMemoryVectorStore
 from app.api.deps import (
+    get_answer_generation_service,
     get_ingestion_service,
     get_retrieval_service,
     get_transcript_repository,
@@ -22,6 +24,7 @@ from app.api.deps import (
 )
 from app.core.config import Settings, get_settings
 from app.main import create_app
+from app.services.generation import AnswerGenerationService
 from app.services.ingestion import IngestionService
 from app.services.retrieval import RetrievalService
 
@@ -84,10 +87,29 @@ def retrieval_service(
 
 
 @pytest.fixture
+def llm_provider() -> FakeLLMProvider:
+    return FakeLLMProvider()
+
+
+@pytest.fixture
+def answer_service(
+    retrieval_service: RetrievalService,
+    transcript_repository: InMemoryTranscriptRepository,
+    llm_provider: FakeLLMProvider,
+) -> AnswerGenerationService:
+    return AnswerGenerationService(
+        retrieval=retrieval_service,
+        repository=transcript_repository,
+        llm=llm_provider,
+    )
+
+
+@pytest.fixture
 def app(
     settings: Settings,
     ingestion_service: IngestionService,
     retrieval_service: RetrievalService,
+    answer_service: AnswerGenerationService,
     transcript_repository: InMemoryTranscriptRepository,
     vector_store: InMemoryVectorStore,
 ) -> FastAPI:
@@ -95,6 +117,7 @@ def app(
     application.dependency_overrides[get_settings] = lambda: settings
     application.dependency_overrides[get_ingestion_service] = lambda: ingestion_service
     application.dependency_overrides[get_retrieval_service] = lambda: retrieval_service
+    application.dependency_overrides[get_answer_generation_service] = lambda: answer_service
     application.dependency_overrides[get_transcript_repository] = lambda: transcript_repository
     application.dependency_overrides[get_vector_store] = lambda: vector_store
     return application

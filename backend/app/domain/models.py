@@ -190,3 +190,47 @@ class ScoredChunk(BaseModel):
 
     chunk: Chunk
     score: float = Field(description="Cosine similarity in [-1.0, 1.0]; higher is closer.")
+
+
+class GeneratedCitation(BaseModel):
+    """An utterance the model cited as evidence.
+
+    Carries the identifier only. Quote text, speaker and timestamp are resolved
+    deterministically from the transcript rather than generated, so the model
+    cannot manufacture citation metadata.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    utterance_id: str = Field(
+        min_length=1,
+        description="ID of a supplied evidence utterance, exactly as given.",
+    )
+
+
+class GeneratedAnswer(BaseModel):
+    """A grounded answer as returned by a language model.
+
+    This is the structured-output schema the provider constrains generation to.
+    Field descriptions are part of the prompt surface -- the model reads them.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    answer: str = Field(
+        description=(
+            "The answer, based only on the supplied meeting evidence. "
+            "If the evidence is insufficient, say so plainly."
+        )
+    )
+    citations: list[GeneratedCitation] = Field(
+        default_factory=list,
+        description=(
+            "Utterances supporting the answer. Use only IDs from the supplied "
+            "evidence. Empty when the evidence is insufficient."
+        ),
+    )
+    insufficient_evidence: bool = Field(
+        default=False,
+        description="True when the supplied evidence does not answer the question.",
+    )
