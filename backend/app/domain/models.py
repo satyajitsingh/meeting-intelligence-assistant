@@ -279,3 +279,21 @@ class ValidatedAnswer(BaseModel):
     answer: str
     citations: list[ResolvedCitation]
     insufficient_evidence: bool
+
+
+class TranscriptionResult(BaseModel):
+    """Text produced from an audio recording by a speech-to-text provider.
+
+    Deliberately not a :class:`Transcript`: this is raw provider output that a
+    human is expected to review and correct before it is ingested.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    text: str = Field(description="Transcribed speech, as returned by the provider.")
+    language: str | None = Field(
+        default=None, description="Detected language, when the model reports one."
+    )
+    duration_seconds: float | None = Field(
+        default=None, description="Audio duration, when the model reports one."
+    )

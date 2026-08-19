@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5"
     llm_timeout_seconds: float = Field(default=30.0, gt=0)
 
+    # Speech to text. Only whisper-1 reports language and duration; the
+    # gpt-4o-transcribe family returns text alone.
+    openai_api_key: SecretStr | None = None
+    openai_transcription_model: str = "whisper-1"
+    max_audio_upload_mb: int = Field(default=25, gt=0)
+
+    @property
+    def max_audio_upload_bytes(self) -> int:
+        return self.max_audio_upload_mb * 1024 * 1024
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, StringConstraints
 from app.domain.models import (
     ScoredChunk,
     Transcript,
+    TranscriptionResult,
     TranscriptSummary,
     Utterance,
     ValidatedAnswer,
@@ -226,4 +227,30 @@ class AnswerResponse(BaseModel):
                 CitationResponse(**citation.model_dump()) for citation in validated.citations
             ],
             insufficient_evidence=validated.insufficient_evidence,
+        )
+
+
+class TranscriptionResponse(BaseModel):
+    """Result of ``POST /api/transcriptions``.
+
+    Nothing here has been stored or indexed. Submit the reviewed text to
+    ``POST /api/transcripts`` to make it searchable.
+    """
+
+    text: str = Field(description="Transcribed speech, for review and correction.")
+    language: str | None = Field(
+        default=None, description="Detected language, when the model reports one."
+    )
+    duration_seconds: float | None = Field(
+        default=None, description="Audio duration, when the model reports one."
+    )
+    filename: str = Field(description="Name of the uploaded file.")
+
+    @classmethod
+    def from_result(cls, *, result: TranscriptionResult, filename: str) -> "TranscriptionResponse":
+        return cls(
+            text=result.text,
+            language=result.language,
+            duration_seconds=result.duration_seconds,
+            filename=filename,
         )

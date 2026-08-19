@@ -16,12 +16,15 @@ from app.adapters.llm.anthropic import AnthropicLLMProvider
 from app.adapters.llm.base import LLMProvider
 from app.adapters.repository.base import TranscriptRepository
 from app.adapters.repository.memory import InMemoryTranscriptRepository
+from app.adapters.stt.base import SpeechToTextProvider
+from app.adapters.stt.openai import OpenAISpeechToTextProvider
 from app.adapters.vectorstore.base import VectorStore
 from app.adapters.vectorstore.memory import InMemoryVectorStore
 from app.core.config import Settings, get_settings
 from app.services.generation import AnswerGenerationService
 from app.services.ingestion import IngestionService
 from app.services.retrieval import RetrievalService
+from app.services.transcription import TranscriptionService
 
 
 @dataclass(frozen=True)
@@ -32,9 +35,11 @@ class Container:
     vector_store: VectorStore
     repository: TranscriptRepository
     llm: LLMProvider
+    speech_to_text: SpeechToTextProvider
     ingestion_service: IngestionService
     retrieval_service: RetrievalService
     answer_service: AnswerGenerationService
+    transcription_service: TranscriptionService
 
 
 def build_container(settings: Settings) -> Container:
@@ -74,14 +79,28 @@ def build_container(settings: Settings) -> Container:
         llm=llm,
     )
 
+    # Also lazy: the OpenAI client is created on the first transcription, so
+    # startup needs no key and makes no request.
+    speech_to_text = OpenAISpeechToTextProvider(
+        api_key=settings.openai_api_key,
+        model=settings.openai_transcription_model,
+    )
+
+    transcription_service = TranscriptionService(
+        provider=speech_to_text,
+        max_upload_bytes=settings.max_audio_upload_bytes,
+    )
+
     return Container(
         embeddings=embeddings,
         vector_store=vector_store,
         repository=repository,
         llm=llm,
+        speech_to_text=speech_to_text,
         ingestion_service=ingestion_service,
         retrieval_service=retrieval_service,
         answer_service=answer_service,
+        transcription_service=transcription_service,
     )
 
 
