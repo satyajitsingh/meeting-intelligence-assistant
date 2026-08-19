@@ -7,6 +7,7 @@ that no credential or environment-specific value is ever committed to source.
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "test", "production"]
@@ -31,6 +32,9 @@ class Settings(BaseSettings):
 
     api_prefix: str = "/api"
     cors_origins: list[str] = ["http://localhost:3000"]
+
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    chunk_target_chars: int = Field(default=700, gt=0)
 
 
 @lru_cache(maxsize=1)
