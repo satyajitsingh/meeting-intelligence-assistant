@@ -9,7 +9,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
-from app.domain.models import Transcript, TranscriptSummary, Utterance
+from app.domain.models import ScoredChunk, Transcript, TranscriptSummary, Utterance
+from app.services.retrieval import DEFAULT_K
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -111,3 +112,55 @@ class TranscriptDetailResponse(BaseModel):
             duration_seconds=transcript.duration_seconds,
             utterances=[UtteranceResponse.from_utterance(u) for u in transcript.utterances],
         )
+
+
+class RetrieveRequest(BaseModel):
+    """Body of ``POST /api/retrieval``."""
+
+    meeting_id: NonEmptyString = Field(
+        description="Meeting to search. Retrieval never spans meetings.",
+        examples=["release-planning"],
+    )
+    query: NonEmptyString = Field(
+        description="Natural-language question.",
+        examples=["What was decided about the marketing budget?"],
+    )
+    k: int = Field(default=DEFAULT_K, gt=0, description="Maximum number of chunks to return.")
+
+
+class RetrievalResultResponse(BaseModel):
+    """One ranked chunk.
+
+    ``utterance_ids`` is the bridge back to the citation units: retrieval
+    returns chunks, but evidence is always resolved to individual utterances.
+    """
+
+    chunk_id: str
+    score: float = Field(description="Cosine similarity; higher is closer.")
+    text: str = Field(description="Speaker-labelled dialogue, exactly as stored.")
+    speakers: list[str]
+    start_seconds: int
+    end_seconds: int
+    utterance_ids: list[str]
+
+    @classmethod
+    def from_scored_chunk(cls, scored: ScoredChunk) -> "RetrievalResultResponse":
+        return cls(
+            chunk_id=scored.chunk.id,
+            score=scored.score,
+            text=scored.chunk.text,
+            speakers=scored.chunk.speakers,
+            start_seconds=scored.chunk.start_seconds,
+            end_seconds=scored.chunk.end_seconds,
+            utterance_ids=scored.chunk.utterance_ids,
+        )
+
+
+class RetrievalResponse(BaseModel):
+    """Ranked retrieval results for one question against one meeting."""
+
+    meeting_id: str
+    query: str = Field(description="The question as searched, after trimming.")
+    results: list[RetrievalResultResponse] = Field(
+        description="Ranked best-first. Empty when the meeting has no matching chunks."
+    )

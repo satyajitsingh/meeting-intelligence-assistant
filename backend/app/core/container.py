@@ -18,6 +18,7 @@ from app.adapters.vectorstore.base import VectorStore
 from app.adapters.vectorstore.memory import InMemoryVectorStore
 from app.core.config import Settings, get_settings
 from app.services.ingestion import IngestionService
+from app.services.retrieval import RetrievalService
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class Container:
     vector_store: VectorStore
     repository: TranscriptRepository
     ingestion_service: IngestionService
+    retrieval_service: RetrievalService
 
 
 def build_container(settings: Settings) -> Container:
@@ -45,11 +47,20 @@ def build_container(settings: Settings) -> Container:
         target_chars=settings.chunk_target_chars,
     )
 
+    # Shares the very same store ingestion writes to -- a second instance
+    # here would search an empty index and silently return nothing.
+    retrieval_service = RetrievalService(
+        embeddings=embeddings,
+        vector_store=vector_store,
+        repository=repository,
+    )
+
     return Container(
         embeddings=embeddings,
         vector_store=vector_store,
         repository=repository,
         ingestion_service=ingestion_service,
+        retrieval_service=retrieval_service,
     )
 
 

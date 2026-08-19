@@ -16,12 +16,14 @@ from app.adapters.repository.memory import InMemoryTranscriptRepository
 from app.adapters.vectorstore.memory import InMemoryVectorStore
 from app.api.deps import (
     get_ingestion_service,
+    get_retrieval_service,
     get_transcript_repository,
     get_vector_store,
 )
 from app.core.config import Settings, get_settings
 from app.main import create_app
 from app.services.ingestion import IngestionService
+from app.services.retrieval import RetrievalService
 
 EMBEDDING_DIMENSION = 128
 
@@ -68,15 +70,31 @@ def ingestion_service(
 
 
 @pytest.fixture
+def retrieval_service(
+    embedding_provider: FakeEmbeddingProvider,
+    vector_store: InMemoryVectorStore,
+    transcript_repository: InMemoryTranscriptRepository,
+) -> RetrievalService:
+    """Shares the same store and repository the ingestion fixture writes to."""
+    return RetrievalService(
+        embeddings=embedding_provider,
+        vector_store=vector_store,
+        repository=transcript_repository,
+    )
+
+
+@pytest.fixture
 def app(
     settings: Settings,
     ingestion_service: IngestionService,
+    retrieval_service: RetrievalService,
     transcript_repository: InMemoryTranscriptRepository,
     vector_store: InMemoryVectorStore,
 ) -> FastAPI:
     application = create_app(settings)
     application.dependency_overrides[get_settings] = lambda: settings
     application.dependency_overrides[get_ingestion_service] = lambda: ingestion_service
+    application.dependency_overrides[get_retrieval_service] = lambda: retrieval_service
     application.dependency_overrides[get_transcript_repository] = lambda: transcript_repository
     application.dependency_overrides[get_vector_store] = lambda: vector_store
     return application
