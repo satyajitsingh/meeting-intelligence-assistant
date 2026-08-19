@@ -14,10 +14,15 @@ from app.adapters.vectorstore.base import VectorStore
 from app.core.config import Settings, get_settings
 from app.core.container import get_container
 from app.services.ingestion import IngestionService
+from app.services.retrieval import RetrievalService
 
 
 def get_ingestion_service() -> IngestionService:
     return get_container().ingestion_service
+
+
+def get_retrieval_service() -> RetrievalService:
+    return get_container().retrieval_service
 
 
 def get_transcript_repository() -> TranscriptRepository:
@@ -30,5 +35,6 @@ def get_vector_store() -> VectorStore:
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
+RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
 TranscriptRepositoryDep = Annotated[TranscriptRepository, Depends(get_transcript_repository)]
 VectorStoreDep = Annotated[VectorStore, Depends(get_vector_store)]
