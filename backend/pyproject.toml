@@ -2,18 +2,21 @@
 name = "meeting-intelligence-backend"
 version = "0.1.0"
 description = "Grounded question answering over meeting transcripts"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "structlog>=24.4",
+    "numpy>=2.0",
+    "fastembed>=0.8",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
+    "anyio>=4.4",
     "httpx2>=2.12",
     "ruff>=0.7",
     "mypy>=1.13",
@@ -28,11 +31,16 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
+# Integration tests download an embedding model, so they are opt-in:
+#   pytest -m integration
+addopts = "-q --strict-markers -m 'not integration'"
+markers = [
+    "integration: needs a model download or network access; excluded by default",
+]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ANN", "RUF"]
@@ -42,6 +50,6 @@ ignore = ["ANN401"]
 "tests/*" = ["ANN"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
