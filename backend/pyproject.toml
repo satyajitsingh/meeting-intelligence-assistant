@@ -12,6 +12,8 @@ dependencies = [
     "numpy>=2.0",
     "fastembed>=0.8",
     "anthropic>=0.40",
+    "openai>=3.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]

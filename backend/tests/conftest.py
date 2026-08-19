@@ -14,12 +14,14 @@ from fastapi.testclient import TestClient
 from app.adapters.embeddings.fake import FakeEmbeddingProvider
 from app.adapters.llm.fake import FakeLLMProvider
 from app.adapters.repository.memory import InMemoryTranscriptRepository
+from app.adapters.stt.fake import FakeSpeechToTextProvider
 from app.adapters.vectorstore.memory import InMemoryVectorStore
 from app.api.deps import (
     get_answer_generation_service,
     get_ingestion_service,
     get_retrieval_service,
     get_transcript_repository,
+    get_transcription_service,
     get_vector_store,
 )
 from app.core.config import Settings, get_settings
@@ -27,6 +29,7 @@ from app.main import create_app
 from app.services.generation import AnswerGenerationService
 from app.services.ingestion import IngestionService
 from app.services.retrieval import RetrievalService
+from app.services.transcription import TranscriptionService
 
 EMBEDDING_DIMENSION = 128
 
@@ -105,11 +108,27 @@ def answer_service(
 
 
 @pytest.fixture
+def speech_to_text_provider() -> FakeSpeechToTextProvider:
+    return FakeSpeechToTextProvider()
+
+
+@pytest.fixture
+def transcription_service(
+    speech_to_text_provider: FakeSpeechToTextProvider, settings: Settings
+) -> TranscriptionService:
+    return TranscriptionService(
+        provider=speech_to_text_provider,
+        max_upload_bytes=settings.max_audio_upload_bytes,
+    )
+
+
+@pytest.fixture
 def app(
     settings: Settings,
     ingestion_service: IngestionService,
     retrieval_service: RetrievalService,
     answer_service: AnswerGenerationService,
+    transcription_service: TranscriptionService,
     transcript_repository: InMemoryTranscriptRepository,
     vector_store: InMemoryVectorStore,
 ) -> FastAPI:
@@ -118,6 +137,7 @@ def app(
     application.dependency_overrides[get_ingestion_service] = lambda: ingestion_service
     application.dependency_overrides[get_retrieval_service] = lambda: retrieval_service
     application.dependency_overrides[get_answer_generation_service] = lambda: answer_service
+    application.dependency_overrides[get_transcription_service] = lambda: transcription_service
     application.dependency_overrides[get_transcript_repository] = lambda: transcript_repository
     application.dependency_overrides[get_vector_store] = lambda: vector_store
     return application

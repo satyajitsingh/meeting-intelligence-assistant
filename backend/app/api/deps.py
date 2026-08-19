@@ -16,6 +16,7 @@ from app.core.container import get_container
 from app.services.generation import AnswerGenerationService
 from app.services.ingestion import IngestionService
 from app.services.retrieval import RetrievalService
+from app.services.transcription import TranscriptionService
 
 
 def get_ingestion_service() -> IngestionService:
@@ -28,6 +29,10 @@ def get_answer_generation_service() -> AnswerGenerationService:
 
 def get_retrieval_service() -> RetrievalService:
     return get_container().retrieval_service
+
+
+def get_transcription_service() -> TranscriptionService:
+    return get_container().transcription_service
 
 
 def get_transcript_repository() -> TranscriptRepository:
@@ -44,5 +49,6 @@ RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)
 AnswerGenerationServiceDep = Annotated[
     AnswerGenerationService, Depends(get_answer_generation_service)
 ]
+TranscriptionServiceDep = Annotated[TranscriptionService, Depends(get_transcription_service)]
 TranscriptRepositoryDep = Annotated[TranscriptRepository, Depends(get_transcript_repository)]
 VectorStoreDep = Annotated[VectorStore, Depends(get_vector_store)]
