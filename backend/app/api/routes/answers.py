@@ -34,13 +34,15 @@ async def answer_question(
 ) -> AnswerResponse:
     """Answer a question using only evidence retrieved from that meeting.
 
-    When the meeting holds no relevant evidence, the response says so and sets
-    ``insufficient_evidence`` rather than guessing.
+    Citations are validated against the transcript before they are returned, so
+    speaker, timestamp and quote are always source data rather than generated
+    text. When the meeting holds no relevant evidence, the response says so and
+    sets ``insufficient_evidence`` rather than guessing.
     """
-    generated = await service.answer(
+    validated = await service.answer(
         meeting_id=payload.meeting_id, question=payload.question, k=payload.k
     )
 
-    return AnswerResponse.from_generated(
-        meeting_id=payload.meeting_id, question=payload.question, generated=generated
+    return AnswerResponse.from_validated(
+        meeting_id=payload.meeting_id, question=payload.question, validated=validated
     )

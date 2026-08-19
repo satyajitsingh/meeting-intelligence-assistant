@@ -173,7 +173,8 @@ async def test_full_transcript_is_not_sent_to_the_llm():
 # --- pass-through ----------------------------------------------------------
 
 
-async def test_the_generated_answer_is_returned_unchanged():
+async def test_the_answer_text_is_returned_unchanged():
+    """Validation touches citations, never the model's prose."""
     configured = GeneratedAnswer(
         answer="The budget is unchanged.",
         citations=[GeneratedCitation(utterance_id="m1:u3")],
@@ -183,11 +184,29 @@ async def test_the_generated_answer_is_returned_unchanged():
 
     result = await service.answer(meeting_id="m1", question="budget")
 
-    assert result == configured
+    assert result.answer == "The budget is unchanged."
+    assert result.insufficient_evidence is False
 
 
-async def test_citations_are_not_validated_in_this_phase():
-    """Phase 8 introduces validation; here a bogus ID must pass straight through."""
+async def test_a_valid_citation_becomes_a_resolved_citation():
+    configured = GeneratedAnswer(
+        answer="The budget is unchanged.",
+        citations=[GeneratedCitation(utterance_id="m1:u3")],
+        insufficient_evidence=False,
+    )
+    service, _, _, _, _ = await build(llm=FakeLLMProvider(configured))
+
+    citation = (await service.answer(meeting_id="m1", question="budget", k=10)).citations[0]
+
+    assert citation.utterance_id == "m1:u3"
+    assert citation.speaker == "Sarah"
+    assert citation.timestamp == "00:01:14"
+    assert citation.start_seconds == 74
+    assert citation.quote == "The budget is unchanged."
+
+
+async def test_hallucinated_citations_are_discarded():
+    """The Phase 7 pass-through is now a rejection: m1:u999 must not survive."""
     configured = GeneratedAnswer(
         answer="Invented.",
         citations=[GeneratedCitation(utterance_id="m1:u999")],
@@ -197,11 +216,28 @@ async def test_citations_are_not_validated_in_this_phase():
 
     result = await service.answer(meeting_id="m1", question="budget")
 
-    assert [c.utterance_id for c in result.citations] == ["m1:u999"]
+    assert result.citations == []
+    assert result.answer == "Invented."
 
 
-async def test_the_answer_carries_no_resolved_quote_metadata():
-    service, _, _, _, _ = await build(
+async def test_mixed_valid_and_invented_citations_keep_only_the_valid_one():
+    configured = GeneratedAnswer(
+        answer="The budget is unchanged.",
+        citations=[
+            GeneratedCitation(utterance_id="m1:u3"),
+            GeneratedCitation(utterance_id="m1:u999"),
+        ],
+        insufficient_evidence=False,
+    )
+    service, _, _, _, _ = await build(llm=FakeLLMProvider(configured))
+
+    result = await service.answer(meeting_id="m1", question="budget", k=10)
+
+    assert [c.utterance_id for c in result.citations] == ["m1:u3"]
+
+
+async def test_citations_carry_evidence_resolved_from_the_transcript():
+    service, _, _, _, repository = await build(
         llm=FakeLLMProvider(
             GeneratedAnswer(
                 answer="Yes.",
@@ -211,9 +247,57 @@ async def test_the_answer_carries_no_resolved_quote_metadata():
         )
     )
 
-    citation = (await service.answer(meeting_id="m1", question="budget")).citations[0]
+    citation = (await service.answer(meeting_id="m1", question="budget", k=10)).citations[0]
 
-    assert set(citation.model_dump()) == {"utterance_id"}
+    assert set(citation.model_dump()) == {
+        "utterance_id",
+        "speaker",
+        "timestamp",
+        "start_seconds",
+        "quote",
+    }
+
+    transcript = await repository.get("m1")
+    source = next(u for u in transcript.utterances if u.id == "m1:u3")
+    assert citation.speaker == source.speaker
+    assert citation.quote == source.text
+    assert citation.timestamp == source.display_timestamp
+    assert citation.start_seconds == source.start_seconds
+
+
+async def test_validation_uses_exactly_the_ids_sent_to_the_llm():
+    """A real utterance that was never shown to the model is still rejected."""
+    service, _, llm, _, _ = await build(target_chars=120)
+
+    # First call with k=1 to learn which evidence the model is shown.
+    await service.answer(meeting_id="m1", question="marketing budget", k=1)
+    shown = set(llm.last_call.allowed_utterance_ids)
+    withheld = next(f"m1:u{i}" for i in range(5) if f"m1:u{i}" not in shown)
+
+    llm.response = GeneratedAnswer(
+        answer="Citing evidence I was never given.",
+        citations=[GeneratedCitation(utterance_id=withheld)],
+        insufficient_evidence=False,
+    )
+    result = await service.answer(meeting_id="m1", question="marketing budget", k=1)
+
+    assert result.citations == []
+
+
+async def test_duplicate_citations_appear_once():
+    configured = GeneratedAnswer(
+        answer="The budget is unchanged.",
+        citations=[
+            GeneratedCitation(utterance_id="m1:u3"),
+            GeneratedCitation(utterance_id="m1:u3"),
+        ],
+        insufficient_evidence=False,
+    )
+    service, _, _, _, _ = await build(llm=FakeLLMProvider(configured))
+
+    result = await service.answer(meeting_id="m1", question="budget", k=10)
+
+    assert [c.utterance_id for c in result.citations] == ["m1:u3"]
 
 
 # --- no evidence -----------------------------------------------------------
