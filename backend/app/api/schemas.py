@@ -10,11 +10,11 @@ from typing import Annotated
 from pydantic import BaseModel, Field, StringConstraints
 
 from app.domain.models import (
-    GeneratedAnswer,
     ScoredChunk,
     Transcript,
     TranscriptSummary,
     Utterance,
+    ValidatedAnswer,
 )
 from app.services.retrieval import DEFAULT_K
 
@@ -187,13 +187,18 @@ class AnswerRequest(BaseModel):
 
 
 class CitationResponse(BaseModel):
-    """One cited utterance.
+    """One piece of supporting evidence.
 
-    Identifier only in this phase; the speaker, timestamp and verbatim quote are
-    resolved from the transcript in a later phase rather than generated.
+    Every field but the identifier is read from the stored transcript, never
+    generated: the quote is the exact source text, and the speaker and
+    timestamp are the parsed ones.
     """
 
     utterance_id: str
+    speaker: str = Field(description="Speaker, exactly as parsed from the transcript.")
+    timestamp: str = Field(description="Normalised HH:MM:SS label from the transcript.")
+    start_seconds: int = Field(description="Offset from the start of the meeting.")
+    quote: str = Field(description="Verbatim utterance text. Never model-generated.")
 
 
 class AnswerResponse(BaseModel):
@@ -202,22 +207,23 @@ class AnswerResponse(BaseModel):
     meeting_id: str
     question: str = Field(description="The question as asked, after trimming.")
     answer: str
-    citations: list[CitationResponse]
+    citations: list[CitationResponse] = Field(
+        description="Validated evidence. Invalid model citations are discarded."
+    )
     insufficient_evidence: bool = Field(
         description="True when the meeting evidence does not answer the question."
     )
 
     @classmethod
-    def from_generated(
-        cls, *, meeting_id: str, question: str, generated: GeneratedAnswer
+    def from_validated(
+        cls, *, meeting_id: str, question: str, validated: ValidatedAnswer
     ) -> "AnswerResponse":
         return cls(
             meeting_id=meeting_id,
             question=question,
-            answer=generated.answer,
+            answer=validated.answer,
             citations=[
-                CitationResponse(utterance_id=citation.utterance_id)
-                for citation in generated.citations
+                CitationResponse(**citation.model_dump()) for citation in validated.citations
             ],
-            insufficient_evidence=generated.insufficient_evidence,
+            insufficient_evidence=validated.insufficient_evidence,
         )

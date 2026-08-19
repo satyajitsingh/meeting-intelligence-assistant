@@ -1,9 +1,9 @@
 """Grounded answer generation.
 
-Orchestration only: retrieve, prepare evidence, ask the model. The answer is
-returned exactly as the model produced it -- citation validation and quote
-resolution are the next phase, and doing them here would hide what the model
-actually returned.
+Orchestration only: retrieve, prepare evidence, ask the model, then check what
+came back. The model contributes the answer prose and a list of utterance IDs;
+every citation is validated and resolved against the stored transcript before
+it reaches a caller.
 """
 
 from __future__ import annotations
@@ -12,7 +12,8 @@ from app.adapters.llm.base import LLMProvider
 from app.adapters.repository.base import TranscriptRepository
 from app.core.errors import NotFoundError
 from app.core.logging import get_logger
-from app.domain.models import GeneratedAnswer
+from app.domain.models import ValidatedAnswer
+from app.services.citations import CitationResolver
 from app.services.context import build_evidence_context, select_evidence_utterances
 from app.services.retrieval import DEFAULT_K, RetrievalService
 
@@ -30,14 +31,18 @@ class AnswerGenerationService:
         retrieval: RetrievalService,
         repository: TranscriptRepository,
         llm: LLMProvider,
+        resolver: CitationResolver | None = None,
     ) -> None:
         self._retrieval = retrieval
         self._repository = repository
         self._llm = llm
+        # Stateless and dependency-free, so it is built here rather than wired
+        # through the composition root. Injectable for tests.
+        self._resolver = resolver or CitationResolver()
 
     async def answer(
         self, *, meeting_id: str, question: str, k: int = DEFAULT_K
-    ) -> GeneratedAnswer:
+    ) -> ValidatedAnswer:
         """Retrieve evidence for ``question`` and generate a grounded answer.
 
         Retrieval runs exactly once; there is no reranking, no second attempt
@@ -54,7 +59,7 @@ class AnswerGenerationService:
 
         if not scored_chunks:
             logger.info("answer.no_evidence", meeting_id=meeting_id.strip(), k=k)
-            return GeneratedAnswer(
+            return ValidatedAnswer(
                 answer=INSUFFICIENT_EVIDENCE_ANSWER,
                 citations=[],
                 insufficient_evidence=True,
@@ -75,16 +80,24 @@ class AnswerGenerationService:
             allowed_utterance_ids=allowed_utterance_ids,
         )
 
+        # The model is not trusted to supply evidence: its IDs are checked
+        # against the evidence it was actually shown, and speaker, timestamp
+        # and quote are read back from the transcript.
+        validated = self._resolver.resolve(
+            generated=generated,
+            transcript=transcript,
+            allowed_utterance_ids=allowed_utterance_ids,
+        )
+
         logger.info(
             "answer.generated",
             meeting_id=meeting_id,
             k=k,
             chunk_count=len(scored_chunks),
             evidence_count=len(utterances),
-            citation_count=len(generated.citations),
-            insufficient_evidence=generated.insufficient_evidence,
+            cited_count=len(generated.citations),
+            valid_citation_count=len(validated.citations),
+            insufficient_evidence=validated.insufficient_evidence,
         )
 
-        # Returned unchanged: whatever the model cited is what the caller sees.
-        # Phase 8 introduces deterministic validation of these IDs.
-        return generated
+        return validated

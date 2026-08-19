@@ -234,3 +234,48 @@ class GeneratedAnswer(BaseModel):
         default=False,
         description="True when the supplied evidence does not answer the question.",
     )
+
+
+class ResolvedCitation(BaseModel):
+    """A citation with its evidence filled in from the transcript.
+
+    Every field except the identifier is read from the stored
+    :class:`Utterance`. :meth:`from_utterance` is the only construction path
+    used in production code, so model-generated speaker names, timestamps or
+    quote text cannot reach a response -- there is no code path that carries
+    them.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    utterance_id: str = Field(min_length=1)
+    speaker: str = Field(description="Speaker, exactly as parsed from the transcript.")
+    timestamp: str = Field(description="Normalised HH:MM:SS label from the transcript.")
+    start_seconds: int = Field(ge=0)
+    quote: str = Field(description="Verbatim utterance text. Never model-generated.")
+
+    @classmethod
+    def from_utterance(cls, utterance: Utterance) -> "ResolvedCitation":
+        """Build a citation from stored transcript data."""
+        return cls(
+            utterance_id=utterance.id,
+            speaker=utterance.speaker,
+            timestamp=utterance.display_timestamp,
+            start_seconds=utterance.start_seconds,
+            quote=utterance.text,
+        )
+
+
+class ValidatedAnswer(BaseModel):
+    """An answer whose citations have been checked against the transcript.
+
+    This is what leaves the service layer. Unlike :class:`GeneratedAnswer`, its
+    citations are guaranteed to exist, to belong to the requested meeting, and
+    to have been among the evidence actually shown to the model.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    answer: str
+    citations: list[ResolvedCitation]
+    insufficient_evidence: bool

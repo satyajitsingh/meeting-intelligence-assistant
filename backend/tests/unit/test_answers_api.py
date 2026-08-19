@@ -90,13 +90,126 @@ def test_citations_carry_utterance_ids(client, ingested, llm_provider):
     assert [c["utterance_id"] for c in citations] == ["m1:u2", "m1:u3"]
 
 
-def test_citations_contain_only_the_utterance_id(client, ingested, llm_provider):
-    """Quote, speaker and timestamp are resolved deterministically in Phase 8."""
+def test_citations_carry_resolved_evidence_fields(client, ingested, llm_provider):
     llm_provider.response = GROUNDED
 
     citation = ask(client).json()["citations"][0]
 
-    assert set(citation) == {"utterance_id"}
+    assert set(citation) == {
+        "utterance_id",
+        "speaker",
+        "timestamp",
+        "start_seconds",
+        "quote",
+    }
+
+
+def test_citation_speaker_comes_from_the_transcript(client, ingested, llm_provider):
+    llm_provider.response = GROUNDED
+
+    citations = ask(client, k=10).json()["citations"]
+
+    assert [c["speaker"] for c in citations] == ["Amir", "Sarah"]
+
+
+def test_citation_timestamp_comes_from_the_transcript(client, ingested, llm_provider):
+    llm_provider.response = GROUNDED
+
+    citations = ask(client, k=10).json()["citations"]
+
+    assert [c["timestamp"] for c in citations] == ["00:00:52", "00:01:14"]
+
+
+def test_citation_start_seconds_comes_from_the_transcript(client, ingested, llm_provider):
+    llm_provider.response = GROUNDED
+
+    citations = ask(client, k=10).json()["citations"]
+
+    assert [c["start_seconds"] for c in citations] == [52, 74]
+
+
+def test_citation_quote_is_the_exact_source_text(client, ingested, llm_provider):
+    llm_provider.response = GROUNDED
+
+    citations = ask(client, k=10).json()["citations"]
+    stored = {u["id"]: u["text"] for u in client.get("/api/transcripts/m1").json()["utterances"]}
+
+    for citation in citations:
+        assert citation["quote"] == stored[citation["utterance_id"]]
+
+
+def test_invented_citation_does_not_appear_in_the_response(client, ingested, llm_provider):
+    """Regression for Phase 7, which returned m1:u999 verbatim."""
+    llm_provider.response = GeneratedAnswer(
+        answer="The budget is unchanged.",
+        citations=[
+            GeneratedCitation(utterance_id="m1:u3"),
+            GeneratedCitation(utterance_id="m1:u999"),
+        ],
+        insufficient_evidence=False,
+    )
+
+    citations = ask(client, k=10).json()["citations"]
+
+    assert citations == [
+        {
+            "utterance_id": "m1:u3",
+            "speaker": "Sarah",
+            "timestamp": "00:01:14",
+            "start_seconds": 74,
+            "quote": "The budget is unchanged.",
+        }
+    ]
+
+
+def test_a_wholly_invented_citation_list_yields_no_citations(client, ingested, llm_provider):
+    llm_provider.response = GeneratedAnswer(
+        answer="Confidently wrong.",
+        citations=[GeneratedCitation(utterance_id="m1:u999")],
+        insufficient_evidence=False,
+    )
+
+    body = ask(client).json()
+
+    assert body["citations"] == []
+    assert body["answer"] == "Confidently wrong."
+
+
+def test_a_citation_from_another_meeting_is_discarded(client, ingested, llm_provider):
+    llm_provider.response = GeneratedAnswer(
+        answer="Cross-meeting leak attempt.",
+        citations=[GeneratedCitation(utterance_id="other-meeting:u0")],
+        insufficient_evidence=False,
+    )
+
+    assert ask(client).json()["citations"] == []
+
+
+def test_duplicate_citations_appear_once(client, ingested, llm_provider):
+    llm_provider.response = GeneratedAnswer(
+        answer="The budget is unchanged.",
+        citations=[
+            GeneratedCitation(utterance_id="m1:u3"),
+            GeneratedCitation(utterance_id="m1:u3"),
+            GeneratedCitation(utterance_id="m1:u3"),
+        ],
+        insufficient_evidence=False,
+    )
+
+    citations = ask(client, k=10).json()["citations"]
+
+    assert [c["utterance_id"] for c in citations] == ["m1:u3"]
+
+
+def test_no_generated_quote_text_reaches_the_response(client, ingested, llm_provider):
+    """Every quote must match a stored utterance exactly."""
+    llm_provider.response = GROUNDED
+
+    citations = ask(client, k=10).json()["citations"]
+    stored = {u["text"] for u in client.get("/api/transcripts/m1").json()["utterances"]}
+
+    assert citations
+    assert all(c["quote"] in stored for c in citations)
 
 
 def test_insufficient_evidence_is_exposed(client, ingested, llm_provider):
