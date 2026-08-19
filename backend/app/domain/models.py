@@ -177,3 +177,16 @@ class Chunk(BaseModel):
             start_seconds=utterances[0].start_seconds,
             end_seconds=utterances[-1].start_seconds,
         )
+
+
+class ScoredChunk(BaseModel):
+    """A chunk returned by similarity search, with its cosine score.
+
+    Lives in the domain rather than the vector-store adapter so that services
+    consuming search results never import from ``app.adapters``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    chunk: Chunk
+    score: float = Field(description="Cosine similarity in [-1.0, 1.0]; higher is closer.")

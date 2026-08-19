@@ -29,3 +29,9 @@ def app(settings: Settings) -> FastAPI:
 def client(app: FastAPI) -> Iterator[TestClient]:
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    """Run async tests on asyncio only; no trio in this project."""
+    return "asyncio"
