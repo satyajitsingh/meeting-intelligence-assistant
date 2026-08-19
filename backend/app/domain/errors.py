@@ -49,3 +49,9 @@ class EmptyTranscriptError(TranscriptParseError):
     """The transcript contained no utterances."""
 
     code = "empty_transcript"
+
+
+class ChunkingError(ValidationError):
+    """A transcript could not be split into retrieval chunks."""
+
+    code = "chunking_error"
