@@ -7,7 +7,7 @@ that no credential or environment-specific value is ever committed to source.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "test", "production"]
@@ -35,6 +35,11 @@ class Settings(BaseSettings):
 
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     chunk_target_chars: int = Field(default=700, gt=0)
+
+    # Answer generation. The key is never logged or returned in an error.
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = "claude-sonnet-5"
+    llm_timeout_seconds: float = Field(default=30.0, gt=0)
 
 
 @lru_cache(maxsize=1)

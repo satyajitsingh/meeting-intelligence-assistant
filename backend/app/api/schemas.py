@@ -9,7 +9,13 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
-from app.domain.models import ScoredChunk, Transcript, TranscriptSummary, Utterance
+from app.domain.models import (
+    GeneratedAnswer,
+    ScoredChunk,
+    Transcript,
+    TranscriptSummary,
+    Utterance,
+)
 from app.services.retrieval import DEFAULT_K
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -164,3 +170,54 @@ class RetrievalResponse(BaseModel):
     results: list[RetrievalResultResponse] = Field(
         description="Ranked best-first. Empty when the meeting has no matching chunks."
     )
+
+
+class AnswerRequest(BaseModel):
+    """Body of ``POST /api/answers``."""
+
+    meeting_id: NonEmptyString = Field(
+        description="Meeting to answer from. Answers never span meetings.",
+        examples=["release-planning"],
+    )
+    question: NonEmptyString = Field(
+        description="Natural-language question about the meeting.",
+        examples=["What was decided about the marketing budget?"],
+    )
+    k: int = Field(default=DEFAULT_K, gt=0, description="Maximum number of chunks to retrieve.")
+
+
+class CitationResponse(BaseModel):
+    """One cited utterance.
+
+    Identifier only in this phase; the speaker, timestamp and verbatim quote are
+    resolved from the transcript in a later phase rather than generated.
+    """
+
+    utterance_id: str
+
+
+class AnswerResponse(BaseModel):
+    """A grounded answer with its supporting utterance IDs."""
+
+    meeting_id: str
+    question: str = Field(description="The question as asked, after trimming.")
+    answer: str
+    citations: list[CitationResponse]
+    insufficient_evidence: bool = Field(
+        description="True when the meeting evidence does not answer the question."
+    )
+
+    @classmethod
+    def from_generated(
+        cls, *, meeting_id: str, question: str, generated: GeneratedAnswer
+    ) -> "AnswerResponse":
+        return cls(
+            meeting_id=meeting_id,
+            question=question,
+            answer=generated.answer,
+            citations=[
+                CitationResponse(utterance_id=citation.utterance_id)
+                for citation in generated.citations
+            ],
+            insufficient_evidence=generated.insufficient_evidence,
+        )

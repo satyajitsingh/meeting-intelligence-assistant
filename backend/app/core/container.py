@@ -12,11 +12,14 @@ from functools import lru_cache
 
 from app.adapters.embeddings.base import EmbeddingProvider
 from app.adapters.embeddings.local import FastEmbedProvider
+from app.adapters.llm.anthropic import AnthropicLLMProvider
+from app.adapters.llm.base import LLMProvider
 from app.adapters.repository.base import TranscriptRepository
 from app.adapters.repository.memory import InMemoryTranscriptRepository
 from app.adapters.vectorstore.base import VectorStore
 from app.adapters.vectorstore.memory import InMemoryVectorStore
 from app.core.config import Settings, get_settings
+from app.services.generation import AnswerGenerationService
 from app.services.ingestion import IngestionService
 from app.services.retrieval import RetrievalService
 
@@ -28,8 +31,10 @@ class Container:
     embeddings: EmbeddingProvider
     vector_store: VectorStore
     repository: TranscriptRepository
+    llm: LLMProvider
     ingestion_service: IngestionService
     retrieval_service: RetrievalService
+    answer_service: AnswerGenerationService
 
 
 def build_container(settings: Settings) -> Container:
@@ -55,12 +60,28 @@ def build_container(settings: Settings) -> Container:
         repository=repository,
     )
 
+    # Constructed here but not connected: the SDK client is created on the
+    # first generate_answer call, so startup makes no request and needs no key.
+    llm = AnthropicLLMProvider(
+        api_key=settings.anthropic_api_key,
+        model=settings.anthropic_model,
+        timeout_seconds=settings.llm_timeout_seconds,
+    )
+
+    answer_service = AnswerGenerationService(
+        retrieval=retrieval_service,
+        repository=repository,
+        llm=llm,
+    )
+
     return Container(
         embeddings=embeddings,
         vector_store=vector_store,
         repository=repository,
+        llm=llm,
         ingestion_service=ingestion_service,
         retrieval_service=retrieval_service,
+        answer_service=answer_service,
     )
 
 
