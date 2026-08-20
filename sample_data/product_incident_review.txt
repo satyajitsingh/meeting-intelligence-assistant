@@ -1,0 +1,12 @@
+[00:00:08] Priya: Let's walk through Tuesday's checkout outage before we close it out.
+[00:00:24] Marcus: Root cause was the payment gateway timeout dropping from thirty seconds to three.
+[00:00:47] Priya: Who changed it, and was it reviewed?
+[00:01:05] Marcus: It came in with the infrastructure upgrade. The change was approved but the
+timeout value was not called out in the description.
+[00:01:33] Devi: Customer impact was forty-one minutes of failed checkouts, roughly nine hundred orders.
+[00:01:58] Priya: So the decision is to pin gateway timeouts in configuration rather than letting the upgrade defaults apply.
+[00:02:21] Marcus: Agreed. I will raise that change by Thursday.
+[00:02:44] Devi: We should also alert on checkout success rate, not just gateway latency.
+[00:03:02] Priya: Yes. Devi owns the alerting change; no date agreed yet.
+[00:03:19] Marcus: One open question is whether other services inherited the same default.
+[00:03:40] Priya: Leave that unresolved for now and bring findings to next week's review.

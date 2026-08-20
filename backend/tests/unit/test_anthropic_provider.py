@@ -331,6 +331,17 @@ async def test_a_missing_api_key_fails_only_when_generating():
     assert "ANTHROPIC_API_KEY" in exc_info.value.message
 
 
+@pytest.mark.parametrize("blank", ["", "   "])
+async def test_a_blank_api_key_is_treated_as_missing(blank):
+    """A blank key must fail like an absent one, not build an unusable client."""
+    provider = AnthropicLLMProvider(api_key=SecretStr(blank))
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await generate(provider)
+
+    assert "ANTHROPIC_API_KEY" in exc_info.value.message
+
+
 def test_constructing_without_a_key_does_not_raise():
     """Ingestion and retrieval must work on a deployment with no LLM key."""
     assert AnthropicLLMProvider(api_key=None) is not None

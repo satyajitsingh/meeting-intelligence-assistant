@@ -138,7 +138,7 @@ class AnthropicLLMProvider:
             except ImportError as exc:  # pragma: no cover - dependency declared
                 raise LLMProviderError("The anthropic package is not installed.") from exc
 
-            if self._api_key is None:
+            if self._api_key is None or not self._api_key.get_secret_value().strip():
                 raise LLMProviderError(
                     "No Anthropic API key is configured. Set ANTHROPIC_API_KEY to "
                     "enable answer generation.",
