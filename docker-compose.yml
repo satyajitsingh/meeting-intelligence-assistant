@@ -1,0 +1,58 @@
+# Local, single-machine composition of the two services.
+#
+#   cp backend/.env.example backend/.env   # then add provider keys
+#   docker compose up --build
+#
+# Ingestion and retrieval work with no keys at all. ANTHROPIC_API_KEY is needed
+# to answer questions; OPENAI_API_KEY only for audio transcription.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      LOG_JSON: "true"
+      ENVIRONMENT: production
+      # The browser calls the API directly from the user's machine, so the
+      # allowed origin is the host-facing frontend address.
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      # Secrets are read from backend/.env at run time, never baked into the image.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-whisper-1}
+    env_file:
+      - path: ./backend/.env
+        required: false
+    volumes:
+      # Keeps the embedding model across rebuilds; it downloads on first ingest.
+      - fastembed-cache:/home/app/.cache/fastembed
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health').read()",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Build-time, because NEXT_PUBLIC_* is inlined into the client bundle.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  fastembed-cache:

@@ -1,0 +1,5 @@
+[00:00:12] Sarah: We need to delay the release because migration is unfinished.
+[00:00:31] John: Agreed. The migration script still fails.
+[00:00:52] Amir: What happens to the marketing budget?
+[00:01:14] Sarah: The budget is unchanged.
+[00:01:38] John: I will update the launch plan by Friday.
