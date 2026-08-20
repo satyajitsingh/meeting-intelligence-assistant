@@ -278,6 +278,17 @@ async def test_a_missing_api_key_fails_only_when_transcribing():
     assert "OPENAI_API_KEY" in exc_info.value.message
 
 
+@pytest.mark.parametrize("blank", ["", "   "])
+async def test_a_blank_api_key_is_treated_as_missing(blank):
+    """A blank key must fail like an absent one, not build an unusable client."""
+    provider = OpenAISpeechToTextProvider(api_key=SecretStr(blank))
+
+    with pytest.raises(SpeechToTextProviderError) as exc_info:
+        await transcribe(provider)
+
+    assert "OPENAI_API_KEY" in exc_info.value.message
+
+
 def test_constructing_without_a_key_does_not_raise():
     """Every other endpoint must work on a deployment with no OpenAI key."""
     assert OpenAISpeechToTextProvider(api_key=None) is not None

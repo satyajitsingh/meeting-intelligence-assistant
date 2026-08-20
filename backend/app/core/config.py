@@ -7,7 +7,7 @@ that no credential or environment-specific value is ever committed to source.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "test", "production"]
@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     @property
     def max_audio_upload_bytes(self) -> int:
         return self.max_audio_upload_mb * 1024 * 1024
+
+    @field_validator("anthropic_api_key", "openai_api_key", mode="before")
+    @classmethod
+    def _blank_secret_is_absent(cls, value: object) -> object:
+        """Treat ``KEY=`` in a .env file as unset rather than as an empty key.
+
+        ``.env.example`` ships these keys blank, so without this an untouched
+        copy produces a client built with an empty credential that fails later
+        with an opaque provider error, instead of the clear "no key configured"
+        message the providers raise for a missing one.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 @lru_cache(maxsize=1)

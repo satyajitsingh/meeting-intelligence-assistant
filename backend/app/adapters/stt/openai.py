@@ -128,7 +128,7 @@ class OpenAISpeechToTextProvider:
             except ImportError as exc:  # pragma: no cover - dependency declared
                 raise SpeechToTextProviderError("The openai package is not installed.") from exc
 
-            if self._api_key is None:
+            if self._api_key is None or not self._api_key.get_secret_value().strip():
                 raise SpeechToTextProviderError(
                     "No OpenAI API key is configured. Set OPENAI_API_KEY to enable "
                     "audio transcription.",
